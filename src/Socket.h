@@ -15,7 +15,22 @@ class TcpSocket
 {
 public:
     TcpSocket();
+    TcpSocket(const std::string& ip,const int& port);
     virtual ~TcpSocket();
+
+    void setIp(const std::string& ip);
+    std::string getIp();
+    void setPort(const int& port);
+    int getPort();
+
+    bool connect();
+    bool isConnected();
+    void disconnect();
+
+    int send(const char* data,const int& length);
+    int send(const std::string& data);
+    void resizeReceiveBuffer(const int& size);
+    virtual void receive(const char* data,const int& length);
 
 private:
     void init();
@@ -23,6 +38,8 @@ private:
 
 private:
     TcpSocketHandle *handle;
+    char* receiveBuffer;
+    int receiveBufferSize;
 };
 
 /* udp socket */
