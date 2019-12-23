@@ -25,7 +25,7 @@ namespace network
 #ifdef _WIN32
 struct TcpSocketHandle
 {
-    WORD sockVersion;
+    WORD socketVersion;
     WSADATA data;
     int wsaStartupResult;
 
@@ -41,6 +41,7 @@ struct TcpSocketHandle
         DISCONNECT = -1,
         CONNECTED = 1
     };
+
 };
 #else
 struct TcpSocketHandle
@@ -75,7 +76,7 @@ TcpSocket::TcpSocket(const std::string &ip, const int &port)
       receiveBuffer(NULL),
       receiveBufferSize(0),
       receiveThread(NULL),
-      receiveThreadCondition(true)
+      receiveThreadCondition(false)
 {
     init();
 
@@ -398,8 +399,8 @@ void TcpSocket::init()
     if (NULL != handle)
     {
 #ifdef _WIN32
-        handle->sockVersion = MAKEWORD(2, 2);
-        handle->wsaStartupResult = WSAStartup(handle->sockVersion, &(handle->data));
+        handle->socketVersion = MAKEWORD(2, 2);
+        handle->wsaStartupResult = WSAStartup(handle->socketVersion, &(handle->data));
         if (0 != handle->wsaStartupResult)
         {
             printf("[TcpSocket::init()]: init failed with socket version. Try again , "
