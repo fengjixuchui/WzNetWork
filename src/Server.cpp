@@ -23,7 +23,7 @@ struct TcpHandle
     WSADATA data;
     int wsaStartupResult;
 
-    sockaddr_in serverAddress;
+    sockaddr_in handleAddress;
     SOCKET socket;
     int connectStatus;
 
@@ -32,6 +32,18 @@ struct TcpHandle
         DISCONNECT = -1,
         CONNECTED = 1
     };
+};
+struct TcpClient
+{
+    TcpHandle clientHandle;
+    std::thread *clientThread;
+    bool clientThreadCondition;
+
+    TcpClient()
+        : clientThread(NULL),
+          clientThreadCondition(false)
+    {
+    }
 };
 #else
 struct TcpServerHandle
@@ -42,9 +54,10 @@ struct TcpServerHandle
 TcpServer::TcpServer()
     : handle(NULL),
       receiveBuffer(NULL),
-      receiveBufferSize(0),
       receiveThread(NULL),
-      receiveThreadCondition(false)
+      receiveThreadCondition(false),
+      receiveBufferSize(0),
+      maxClients(10)
 {
     init();
 }
@@ -52,9 +65,10 @@ TcpServer::TcpServer()
 TcpServer::TcpServer(const int &port)
     : handle(NULL),
       receiveBuffer(NULL),
-      receiveBufferSize(0),
       receiveThread(NULL),
-      receiveThreadCondition(false)
+      receiveThreadCondition(false),
+      receiveBufferSize(0),
+      maxClients(10)
 {
     init();
 }
@@ -74,7 +88,7 @@ void TcpServer::setPort(const int &port)
     {
         if (0 <= port && port <= 65535)
         {
-            handle->serverAddress.sin_port = htons(port);
+            handle->handleAddress.sin_port = htons(port);
         }
         else
         {
@@ -92,7 +106,7 @@ int TcpServer::getPort()
     if (NULL != handle)
 #endif
     {
-        return ntohs(handle->serverAddress.sin_port);
+        return ntohs(handle->handleAddress.sin_port);
     }
     else
     {
@@ -105,8 +119,8 @@ bool TcpServer::listen()
     if (NULL != handle && 0 == handle->wsaStartupResult)
     {
         if (SOCKET_ERROR == bind(handle->socket,
-                                 (LPSOCKADDR) & (handle->serverAddress),
-                                 sizeof(handle->serverAddress)))
+                                 (LPSOCKADDR) & (handle->handleAddress),
+                                 sizeof(handle->handleAddress)))
         {
             printf("[TcpServer::listen()]: listen failed with bind error.\n");
             return false;
@@ -121,7 +135,12 @@ bool TcpServer::listen()
 
     receiveThreadCondition = true;
     receiveThread = new std::thread(&TcpServer::receiveThreadRun, this);
-
+    if(NULL == receiveThread)
+    {
+        printf("[TcpServer::listen()]: listen failed with receiveThread is NULL.\n");
+        receiveThreadCondition = false;
+        return false;
+    }
     return true;
 }
 
@@ -139,6 +158,16 @@ void TcpServer::resizeReceiveBuffer(const int &size)
         receiveBufferSize = size;
         receiveBuffer = new char[receiveBufferSize];
     }
+}
+
+void TcpServer::setMaxClients(const int &maxClients)
+{
+    this->maxClients = maxClients;
+}
+
+int TcpServer::getMaxClients()
+{
+    return maxClients;
 }
 
 void TcpServer::init()
@@ -160,12 +189,12 @@ void TcpServer::init()
             if (INVALID_SOCKET == handle->socket)
             {
                 printf("[TcpServer::init()]: init failed with invalid socket. Try again , "
-                       "debug source or contact author !");
+                       "debug source or contact author !\n");
             }
 
-            handle->serverAddress.sin_family = AF_INET;
-            handle->serverAddress.sin_port = htons(0);
-            handle->serverAddress.sin_addr.S_un.S_addr = INADDR_ANY;
+            handle->handleAddress.sin_family = AF_INET;
+            handle->handleAddress.sin_port = htons(0);
+            handle->handleAddress.sin_addr.S_un.S_addr = INADDR_ANY;
         }
     }
     else
@@ -194,22 +223,67 @@ void TcpServer::release()
 
 void TcpServer::receiveThreadRun()
 {
-    TcpHandle client;
-    int clientAddressLength = sizeof(client.serverAddress);
-
+    TcpClient *client = NULL;
+    int clientAddressLength = sizeof(sockaddr_in);
     while (receiveThreadCondition)
     {
-        client.socket = accept(handle->socket,
-                        (SOCKADDR *)&client.serverAddress, 
-                        &clientAddressLength);
-
-        if(INVALID_SOCKET == client.socket)
+        if (maxClients <= clients.size())
         {
             printf("[TcpServer::receiveThreadRun()]: accept failed with "
-            "invalid client.\n");
+                   "clients enough , you need resize maxClients.\n");
             continue;
         }
 
+        client = new TcpClient;
+        if (NULL == client)
+        {
+            printf("[TcpServer::receiveThreadRun()]: accept failed with client is NULL.\n");
+            continue;
+        }
+        client->clientHandle.socket = accept(handle->socket,
+                                             (SOCKADDR *)&(client->clientHandle.handleAddress),
+                                             &clientAddressLength);
+        if (INVALID_SOCKET == client->clientHandle.socket)
+        {
+            printf("[TcpServer::receiveThreadRun()]: accept failed with invalid socket.\n");
+            delete client;
+            client = NULL;
+            continue;
+        }
+
+        client->clientThreadCondition = true;
+        client->clientThread = new std::thread(&TcpServer::clientsReceiveThreadRun,
+                                               this,
+                                               client);
+        if (NULL == client->clientThread)
+        {
+            printf("[TcpServer::receiveThreadRun()]: accept failed with client->clientThread is NULL.\n");
+            delete client;
+            client = NULL;
+            client->clientThreadCondition = false;
+            continue;
+        }
+
+        clients.push_back(client);
+    }
+}
+
+void TcpServer::clientsReceiveThreadRun(TcpClient *client)
+{
+    int receiveLength = 0;
+    while (client->clientThreadCondition)
+    {
+        receiveLength = 0;
+        memset(receiveBuffer,0,receiveBufferSize);
+
+        receiveLength = recv(client->clientHandle.socket,
+                             receiveBuffer,
+                             receiveBufferSize,
+                             0);
+        if (receiveLength > 0)
+        {
+            receive(*client, receiveBuffer, receiveBufferSize);
+        }
     }
 }
 

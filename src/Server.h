@@ -12,6 +12,7 @@ namespace network
 
 /* tcp server */
 struct TcpHandle;
+struct TcpClient;
 class TcpServer
 {
 public:
@@ -27,20 +28,29 @@ public:
 
     void resizeReceiveBuffer(const int& size);
 
-    virtual void receive() = 0;
+    void setMaxClients(const int& maxClients);
+    int getMaxClients();
+
+    virtual void receive(const TcpClient& client,
+                        const char* data,
+                        const int& length) = 0;
 
 private:
     void init();
     void release();
     void receiveThreadRun();
+    void clientsReceiveThreadRun(TcpClient* client);
 
 private:
     TcpHandle *handle;
     char* receiveBuffer;
     int receiveBufferSize;
 
-    std::thread *receiveThread;
+    std::thread* receiveThread;
     bool receiveThreadCondition;
+
+    std::vector<TcpClient*> clients;
+    int maxClients; /* default: 10 */
 };
 
 /* udp server */

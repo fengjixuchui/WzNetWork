@@ -212,7 +212,7 @@ bool TcpSocket::connect()
     if (-1 == handle->socket)
 #endif
     {
-        printf("[TcpSocket::connect()]: connect failed with invalid socket!");
+        printf("[TcpSocket::connect()]: connect failed with invalid socket!\n");
         return false;
     }
     int connectResult = ::connect(handle->socket,
@@ -225,7 +225,7 @@ bool TcpSocket::connect()
 #endif
     {
         printf("[TcpSocket::connect()]: connect failed with %s:%d,"
-               "please check if the server is available.",
+               "please check if the server is available.\n",
                getIp().data(),
                getPort());
         handle->connectStatus = TcpSocketHandle::CONNECT_STATUS::DISCONNECT;
@@ -248,6 +248,12 @@ bool TcpSocket::connect()
 
     receiveThreadCondition = true;
     receiveThread = new std::thread(&TcpSocket::receiveThreadRun, this);
+    if(NULL == receiveThread)
+    {
+        printf("[TcpSocket::connect()]: connect failed with receiveThread is NULL.\n");
+        receiveThreadCondition = false;
+        return false;
+    }
 
     return true;
 }
