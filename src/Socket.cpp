@@ -61,7 +61,8 @@ TcpSocket::TcpSocket()
     : handle(NULL),
       receiveBuffer(NULL),
       receiveBufferSize(0),
-      receiveThread(NULL)
+      receiveThread(NULL),
+      receiveCallback(NULL)
 {
     init();
 }
@@ -70,7 +71,8 @@ TcpSocket::TcpSocket(const std::string &ip, const int &port)
     : handle(NULL),
       receiveBuffer(NULL),
       receiveBufferSize(0),
-      receiveThread(NULL)
+      receiveThread(NULL),
+      receiveCallback(NULL)
 {
     init();
 
@@ -298,6 +300,19 @@ void TcpSocket::resizeReceiveBuffer(const int &size)
         receiveBufferSize = size;
         receiveBuffer = new char[receiveBufferSize];
     }
+}
+
+void TcpSocket::receive(const char *data, const int &length)
+{
+    if (NULL != receiveCallback)
+    {
+        receiveCallback(data, length);
+    }
+}
+
+void TcpSocket::setReceiveCallback(ReceiveCallback receiveCallback)
+{
+    this->receiveCallback = receiveCallback;
 }
 
 void TcpSocket::init()
