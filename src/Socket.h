@@ -3,6 +3,7 @@
 #define __SOCKET_H__
 
 #include <iostream>
+#include <thread>
 
 namespace wz
 {
@@ -30,16 +31,19 @@ public:
     int send(const char* data,const int& length);
     int send(const std::string& data);
     void resizeReceiveBuffer(const int& size);
-    virtual void receive(const char* data,const int& length);
+
+    virtual void receive(const char* data,const int& length) = 0;
 
 private:
     void init();
     void release();
+    void receiveThreadRun();
 
 private:
     TcpSocketHandle *handle;
     char* receiveBuffer;
     int receiveBufferSize;
+    std::thread* receiveThread;
 };
 
 /* udp socket */
