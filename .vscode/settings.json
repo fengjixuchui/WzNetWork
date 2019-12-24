@@ -44,6 +44,9 @@
         "unordered_map": "cpp",
         "vector": "cpp",
         "xhash": "cpp",
-        "mutex": "cpp"
+        "mutex": "cpp",
+        "algorithm": "cpp",
+        "deque": "cpp",
+        "queue": "cpp"
     }
 }

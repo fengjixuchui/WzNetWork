@@ -3,6 +3,7 @@
 
 #ifdef _WIN32
 #include <winsock2.h>
+#include <WS2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 #else
 #include <sys/types.h>
@@ -37,11 +38,9 @@ struct TcpClient
 {
     TcpHandle clientHandle;
     std::thread *clientThread;
-    bool clientThreadCondition;
 
     TcpClient()
-        : clientThread(NULL),
-          clientThreadCondition(false)
+        : clientThread(NULL)
     {
     }
 };
@@ -53,22 +52,24 @@ struct TcpServerHandle
 
 TcpServer::TcpServer()
     : handle(NULL),
+      listenStatus(false),
       receiveBuffer(NULL),
-      receiveThread(NULL),
-      receiveThreadCondition(false),
       receiveBufferSize(0),
-      maxClients(10)
+      receiveThread(NULL),
+      maxClients(10),
+      clientsEnoughWarned(false)
 {
     init();
 }
 
 TcpServer::TcpServer(const int &port)
     : handle(NULL),
+      listenStatus(false),
       receiveBuffer(NULL),
-      receiveThread(NULL),
-      receiveThreadCondition(false),
       receiveBufferSize(0),
-      maxClients(10)
+      receiveThread(NULL),
+      maxClients(10),
+      clientsEnoughWarned(false)
 {
     init();
 }
@@ -118,11 +119,20 @@ bool TcpServer::listen()
 {
     if (NULL != handle && 0 == handle->wsaStartupResult)
     {
+        handle->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (INVALID_SOCKET == handle->socket)
+        {
+            printf("[TcpServer::init()]: init failed with invalid socket. Try again , "
+                    "debug source or contact author !\n");
+            return false;
+        }
+
         if (SOCKET_ERROR == bind(handle->socket,
                                  (LPSOCKADDR) & (handle->handleAddress),
                                  sizeof(handle->handleAddress)))
         {
-            printf("[TcpServer::listen()]: listen failed with bind error.\n");
+            printf("[TcpServer::listen()]: listen failed with bind error , "
+            "may be server is closed.\n");
             return false;
         }
 
@@ -133,19 +143,41 @@ bool TcpServer::listen()
         }
     }
 
-    receiveThreadCondition = true;
     receiveThread = new std::thread(&TcpServer::receiveThreadRun, this);
     if(NULL == receiveThread)
     {
         printf("[TcpServer::listen()]: listen failed with receiveThread is NULL.\n");
-        receiveThreadCondition = false;
         return false;
     }
+
+    listenStatus = true;
     return true;
 }
 
 void TcpServer::close()
 {
+    if(clients.size() > 0)
+    {
+        while(clients.size() > 0)
+        {
+            closesocket(clients.front()->clientHandle.socket);
+            clients.front()->clientHandle.socket = INVALID_SOCKET;
+            clients.front()->clientThread->join();
+            delete clients.front()->clientThread;
+            clients.front()->clientThread = NULL;
+            clients.pop();
+        }
+    }
+
+    if(INVALID_SOCKET != handle->socket)
+    {
+        closesocket(handle->socket);
+        handle->socket = INVALID_SOCKET;
+        receiveThread->join();
+        delete receiveThread;
+        receiveThread = NULL;
+        listenStatus = false;
+    }
 }
 
 void TcpServer::resizeReceiveBuffer(const int &size)
@@ -157,6 +189,7 @@ void TcpServer::resizeReceiveBuffer(const int &size)
 
         receiveBufferSize = size;
         receiveBuffer = new char[receiveBufferSize];
+        clientsEnoughWarned = false;
     }
 }
 
@@ -168,6 +201,31 @@ void TcpServer::setMaxClients(const int &maxClients)
 int TcpServer::getMaxClients()
 {
     return maxClients;
+}
+
+bool TcpServer::getListenStatus()
+{
+    return listenStatus;
+}
+
+int TcpServer::send(const TcpClient &client,
+             const char *data,
+             const int &length)
+{
+    return ::send(client.clientHandle.socket,data,length,0);
+}
+
+int TcpServer::send(const TcpClient &client,
+             const std::string &data)
+{
+    return send(client,data.data(),data.size());
+}
+
+std::string TcpServer::getClientAddress(const TcpClient &client)
+{
+    char ip[16] = {'0'};
+    inet_ntop(AF_INET, &(client.clientHandle.handleAddress.sin_addr), ip, sizeof(ip));
+    return ip;
 }
 
 void TcpServer::init()
@@ -185,13 +243,6 @@ void TcpServer::init()
         }
         else
         {
-            handle->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-            if (INVALID_SOCKET == handle->socket)
-            {
-                printf("[TcpServer::init()]: init failed with invalid socket. Try again , "
-                       "debug source or contact author !\n");
-            }
-
             handle->handleAddress.sin_family = AF_INET;
             handle->handleAddress.sin_port = htons(0);
             handle->handleAddress.sin_addr.S_un.S_addr = INADDR_ANY;
@@ -208,6 +259,13 @@ void TcpServer::init()
 
 void TcpServer::release()
 {
+    close();
+    
+    if (0 != handle->wsaStartupResult)
+    {
+        WSACleanup();
+        handle->wsaStartupResult = 0;
+    }
     if (NULL != handle)
     {
         delete handle;
@@ -225,12 +283,17 @@ void TcpServer::receiveThreadRun()
 {
     TcpClient *client = NULL;
     int clientAddressLength = sizeof(sockaddr_in);
-    while (receiveThreadCondition)
+
+    while(INVALID_SOCKET != handle->socket)
     {
-        if (maxClients <= clients.size())
+        if (maxClients < clients.size())
         {
-            printf("[TcpServer::receiveThreadRun()]: accept failed with "
-                   "clients enough , you need resize maxClients.\n");
+            if(!clientsEnoughWarned)
+            {
+                printf("[TcpServer::receiveThreadRun()]: accept failed with "
+                    "clients enough , you need resize maxClients.\n");
+                clientsEnoughWarned = true;
+            }
             continue;
         }
 
@@ -241,8 +304,8 @@ void TcpServer::receiveThreadRun()
             continue;
         }
         client->clientHandle.socket = accept(handle->socket,
-                                             (SOCKADDR *)&(client->clientHandle.handleAddress),
-                                             &clientAddressLength);
+                                                (SOCKADDR *)&(client->clientHandle.handleAddress),
+                                                &clientAddressLength);
         if (INVALID_SOCKET == client->clientHandle.socket)
         {
             printf("[TcpServer::receiveThreadRun()]: accept failed with invalid socket.\n");
@@ -251,39 +314,38 @@ void TcpServer::receiveThreadRun()
             continue;
         }
 
-        client->clientThreadCondition = true;
         client->clientThread = new std::thread(&TcpServer::clientsReceiveThreadRun,
-                                               this,
-                                               client);
+                                                this,
+                                                client);
         if (NULL == client->clientThread)
         {
             printf("[TcpServer::receiveThreadRun()]: accept failed with client->clientThread is NULL.\n");
             delete client;
             client = NULL;
-            client->clientThreadCondition = false;
             continue;
         }
 
-        clients.push_back(client);
+        clients.push(client);
     }
 }
 
 void TcpServer::clientsReceiveThreadRun(TcpClient *client)
 {
     int receiveLength = 0;
-    while (client->clientThreadCondition)
-    {
-        receiveLength = 0;
-        memset(receiveBuffer,0,receiveBufferSize);
 
+    memset(receiveBuffer,0,receiveBufferSize);
+    receiveLength = recv(client->clientHandle.socket,
+                            receiveBuffer,
+                            receiveBufferSize,
+                            0);
+    while(receiveLength > 0)
+    {
+        receive(*client, receiveBuffer, receiveLength);
+        memset(receiveBuffer,0,receiveBufferSize);
         receiveLength = recv(client->clientHandle.socket,
                              receiveBuffer,
                              receiveBufferSize,
                              0);
-        if (receiveLength > 0)
-        {
-            receive(*client, receiveBuffer, receiveBufferSize);
-        }
     }
 }
 

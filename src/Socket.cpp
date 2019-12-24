@@ -33,15 +33,11 @@ struct TcpSocketHandle
     SOCKET socket;
     int connectStatus;
 
-    int sendTimeOut;    /* unit: ms */
-    int receiveTimeOut; /* unit: ms */
-
     enum CONNECT_STATUS
     {
         DISCONNECT = -1,
         CONNECTED = 1
     };
-
 };
 #else
 struct TcpSocketHandle
@@ -65,8 +61,7 @@ TcpSocket::TcpSocket()
     : handle(NULL),
       receiveBuffer(NULL),
       receiveBufferSize(0),
-      receiveThread(NULL),
-      receiveThreadCondition(false)
+      receiveThread(NULL)
 {
     init();
 }
@@ -75,8 +70,7 @@ TcpSocket::TcpSocket(const std::string &ip, const int &port)
     : handle(NULL),
       receiveBuffer(NULL),
       receiveBufferSize(0),
-      receiveThread(NULL),
-      receiveThreadCondition(false)
+      receiveThread(NULL)
 {
     init();
 
@@ -232,26 +226,12 @@ bool TcpSocket::connect()
         return false;
     }
 
-#ifdef _WIN32
-    setsockopt(handle->socket, SOL_SOCKET, SO_SNDTIMEO,
-               (char *)&(handle->sendTimeOut), sizeof(int));
-    setsockopt(handle->socket, SOL_SOCKET, SO_RCVTIMEO,
-               (char *)&(handle->receiveTimeOut), sizeof(int));
-#else
-    setsockopt(handle->socket, SOL_SOCKET, SO_SNDTIMEO,
-               (char *)&(handle->sendTimeOut), sizeof(timeval));
-    setsockopt(handle->socket, SOL_SOCKET, SO_RCVTIMEO,
-               (char *)&(handle->receiveTimeOut), sizeof(timeval));
-#endif
-
     handle->connectStatus = TcpSocketHandle::CONNECT_STATUS::CONNECTED;
 
-    receiveThreadCondition = true;
     receiveThread = new std::thread(&TcpSocket::receiveThreadRun, this);
-    if(NULL == receiveThread)
+    if (NULL == receiveThread)
     {
         printf("[TcpSocket::connect()]: connect failed with receiveThread is NULL.\n");
-        receiveThreadCondition = false;
         return false;
     }
 
@@ -280,14 +260,6 @@ void TcpSocket::disconnect()
         TcpSocketHandle::CONNECT_STATUS::DISCONNECT != handle->connectStatus)
 #endif
     {
-        if (NULL != receiveThread)
-        {
-            receiveThreadCondition = false;
-            receiveThread->join();
-            delete receiveThread;
-            receiveThread = NULL;
-        }
-
 #ifdef _WIN32
         closesocket(handle->socket);
         handle->socket = INVALID_SOCKET;
@@ -296,6 +268,13 @@ void TcpSocket::disconnect()
         handle->socket = -1;
 #endif
         handle->connectStatus = TcpSocketHandle::CONNECT_STATUS::DISCONNECT;
+
+        if (NULL != receiveThread)
+        {
+            receiveThread->join();
+            delete receiveThread;
+            receiveThread = NULL;
+        }
     }
 }
 
@@ -318,84 +297,6 @@ void TcpSocket::resizeReceiveBuffer(const int &size)
 
         receiveBufferSize = size;
         receiveBuffer = new char[receiveBufferSize];
-    }
-}
-
-void TcpSocket::setSendTimeout(const unsigned int &timeout)
-{
-    if (NULL != handle)
-    {
-#ifdef _WIN32
-        handle->sendTimeOut = timeout;
-        if (TcpSocketHandle::CONNECT_STATUS::CONNECTED == handle->connectStatus)
-        {
-            setsockopt(handle->socket, SOL_SOCKET, SO_SNDTIMEO,
-                       (char *)&(handle->sendTimeOut), sizeof(int));
-        }
-#else
-        handle->sendTimeOut = {timeout / 1000, (timeout % 1000) * 1000};
-        if (TcpSocketHandle::CONNECT_STATUS::CONNECTED == handle->connectStatus)
-        {
-            setsockopt(handle->socket, SOL_SOCKET, SO_SNDTIMEO,
-                       (char *)&(handle->sendTimeOut), sizeof(timeval));
-        }
-#endif
-    }
-}
-
-int TcpSocket::getSendTimeout()
-{
-    if (NULL != handle)
-    {
-#ifdef _WIN32
-        return handle->sendTimeOut;
-#else
-        return (handle->sendTimeOut.tv_sec) * 1000 +
-               (handle->sendTimeOut.tv_usec) / 1000;
-#endif
-    }
-    else
-    {
-        return 0;
-    }
-}
-
-void TcpSocket::setReceiveTimeout(const unsigned int &timeout)
-{
-    if (NULL != handle)
-    {
-#ifdef _WIN32
-        handle->receiveTimeOut = timeout;
-        if (TcpSocketHandle::CONNECT_STATUS::CONNECTED == handle->connectStatus)
-        {
-            setsockopt(handle->socket, SOL_SOCKET, SO_RCVTIMEO,
-                       (char *)&(handle->receiveTimeOut), sizeof(int));
-        }
-#else
-        handle->receiveTimeOut = {timeout / 1000, (timeout % 1000) * 1000};
-        if (TcpSocketHandle::CONNECT_STATUS::CONNECTED == handle->connectStatus)
-        {
-            setsockopt(handle->socket, SOL_SOCKET, SO_RCVTIMEO,
-                       (char *)&(handle->receiveTimeOut), sizeof(timeval));
-        }
-#endif
-    }
-}
-
-int TcpSocket::getReceiveTimeout()
-{
-    if (NULL != handle)
-    {
-#ifdef _WIN32
-        return handle->receiveTimeOut;
-#else
-        return (handle->receiveTimeOut.tv_sec) * 1000 +
-               (handle->receiveTimeOut.tv_usec) / 1000;
-#endif
-    }
-    else
-    {
-        return 0;
     }
 }
 
@@ -430,8 +331,6 @@ void TcpSocket::init()
             handle->serverAddress.sin_port = htons(0);
             handle->socket = INVALID_SOCKET;
             handle->connectStatus = TcpSocketHandle::CONNECT_STATUS::DISCONNECT;
-            handle->sendTimeOut = 5 * 1000;
-            handle->receiveTimeOut = 5 * 1000;
         }
 #else
         memset(&(handle->serverAddress), 0, sizeof(handle->serverAddress));
@@ -454,13 +353,6 @@ void TcpSocket::init()
 
 void TcpSocket::release()
 {
-    if (NULL != receiveThread)
-    {
-        receiveThreadCondition = false;
-        receiveThread->join();
-        delete receiveThread;
-        receiveThread = NULL;
-    }
 #ifdef _WIN32
     if (INVALID_SOCKET != handle->socket)
     {
@@ -473,6 +365,13 @@ void TcpSocket::release()
         handle->socket = -1;
 #endif
         handle->connectStatus = TcpSocketHandle::CONNECT_STATUS::DISCONNECT;
+
+        if (NULL != receiveThread)
+        {
+            receiveThread->join();
+            delete receiveThread;
+            receiveThread = NULL;
+        }
     }
 #ifdef _WIN32
     if (0 != handle->wsaStartupResult)
@@ -497,30 +396,28 @@ void TcpSocket::release()
 void TcpSocket::receiveThreadRun()
 {
     int receiveLength = 0;
-    while (receiveThreadCondition)
-    {
-        receiveLength = 0;
-        memset(receiveBuffer, 0, receiveBufferSize);
+    receiveLength = 0;
+    memset(receiveBuffer, 0, receiveBufferSize);
 
 #ifdef _WIN32
-        if (NULL != handle &&
-            0 == handle->wsaStartupResult &&
-            INVALID_SOCKET != handle->socket &&
-            NULL != receiveBuffer &&
-            0 != receiveBufferSize)
-        {
+    if (NULL != handle &&
+        0 == handle->wsaStartupResult &&
+        INVALID_SOCKET != handle->socket &&
+        NULL != receiveBuffer &&
+        0 != receiveBufferSize)
+    {
 #else
-        if (NULL != handle &&
-            -1 != handle->socket &&
-            NULL != receiveBuffer &&
-            0 != receiveBufferSize)
-        {
+    if (NULL != handle &&
+        -1 != handle->socket &&
+        NULL != receiveBuffer &&
+        0 != receiveBufferSize)
+    {
 #endif
-            receiveLength = recv(handle->socket, receiveBuffer, receiveBufferSize, 0);
-        }
-        if (receiveLength > 0)
+        receiveLength = recv(handle->socket, receiveBuffer, receiveBufferSize, 0);
+        while (receiveLength > 0)
         {
             receive(receiveBuffer, receiveLength);
+            receiveLength = recv(handle->socket, receiveBuffer, receiveBufferSize, 0);
         }
     }
 }

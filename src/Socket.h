@@ -32,12 +32,6 @@ public:
     int send(const std::string& data);
     void resizeReceiveBuffer(const int& size);
 
-    /* unit: ms , 0: infinity */
-    void setSendTimeout(const unsigned int& timeout); 
-    int getSendTimeout(); /* default: 5s */
-    void setReceiveTimeout(const unsigned int& timeout); 
-    int getReceiveTimeout(); /* default: 5s */
-
     virtual void receive(const char* data,const int& length) = 0;
 
 private:
@@ -50,7 +44,6 @@ private:
     char* receiveBuffer;
     int receiveBufferSize;
     std::thread* receiveThread;
-    bool receiveThreadCondition;
 };
 
 /* udp socket */
