@@ -46,9 +46,6 @@ struct TcpSocketHandle
     int socket;
     int connectStatus;
 
-    timeval sendTimeOut;    /* unit: {s,us} */
-    timeval receiveTimeOut; /* unit: {s,us} */
-
     enum CONNECT_STATUS
     {
         DISCONNECT = -1,
@@ -61,7 +58,8 @@ TcpSocket::TcpSocket()
     : handle(NULL),
       receiveBuffer(NULL),
       receiveBufferSize(0),
-      receiveThread(NULL)
+      receiveThread(NULL),
+      receiveCallback(NULL)
 {
     init();
 }
@@ -70,7 +68,8 @@ TcpSocket::TcpSocket(const std::string &ip, const int &port)
     : handle(NULL),
       receiveBuffer(NULL),
       receiveBufferSize(0),
-      receiveThread(NULL)
+      receiveThread(NULL),
+      receiveCallback(NULL)
 {
     init();
 
@@ -199,16 +198,28 @@ bool TcpSocket::connect()
     }
 
 #ifdef _WIN32
-    handle->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (INVALID_SOCKET == handle->socket)
-#else
-    handle->socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (-1 == handle->socket)
-#endif
+    if (NULL != handle && 0 == handle->wsaStartupResult)
     {
-        printf("[TcpSocket::connect()]: connect failed with invalid socket!\n");
+        handle->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (INVALID_SOCKET == handle->socket)
+#else
+    if (NULL != handle)
+    {
+        handle->socket = socket(AF_INET, SOCK_STREAM, 0);
+        if (-1 == handle->socket)
+#endif
+        {
+            printf("[TcpSocket::connect()]: connect failed with invalid socket!\n");
+            return false;
+        }
+    }
+    else
+    {
+        printf("[TcpSocket::connect()]: connect failed with handle is NULL"
+               " or invalid handle!\n");
         return false;
     }
+
     int connectResult = ::connect(handle->socket,
                                   (sockaddr *)&(handle->serverAddress),
                                   sizeof(handle->serverAddress));
@@ -264,6 +275,7 @@ void TcpSocket::disconnect()
         closesocket(handle->socket);
         handle->socket = INVALID_SOCKET;
 #else
+        shutdown(handle->socket, SHUT_RDWR);
         close(handle->socket);
         handle->socket = -1;
 #endif
@@ -298,6 +310,19 @@ void TcpSocket::resizeReceiveBuffer(const int &size)
         receiveBufferSize = size;
         receiveBuffer = new char[receiveBufferSize];
     }
+}
+
+void TcpSocket::receive(const char *data, const int &length)
+{
+    if (NULL != receiveCallback)
+    {
+        receiveCallback(data, length);
+    }
+}
+
+void TcpSocket::setReceiveCallback(ReceiveCallback receiveCallback)
+{
+    this->receiveCallback = receiveCallback;
 }
 
 void TcpSocket::init()
@@ -338,13 +363,11 @@ void TcpSocket::init()
         handle->serverAddress.sin_port = htons(0);
         handle->socket = -1;
         handle->connectStatus = TcpSocketHandle::CONNECT_STATUS::DISCONNECT;
-        handle->sendTimeOut = {5, 0};
-        handle->receiveTimeOut = {5, 0};
 #endif
     }
     else
     {
-        printf("[TcpSocket::init()]: handle is NULL,new TcpTcpSocketHandle failed.\n");
+        printf("[TcpSocket::init()]: handle is NULL , new TcpTcpSocketHandle failed.\n");
     }
 
     receiveBufferSize = 4096;
@@ -361,6 +384,7 @@ void TcpSocket::release()
 #else
     if (-1 != handle->socket)
     {
+        shutdown(handle->socket, SHUT_RDWR);
         close(handle->socket);
         handle->socket = -1;
 #endif

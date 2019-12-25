@@ -12,6 +12,10 @@ namespace network
 {
 
 /* tcp server */
+using ReceiveCallback = void (*)(void* server,
+                                 void* client,
+                                 const char *data,
+                                 const int &length);
 struct TcpHandle;
 struct TcpClient;
 class TcpServer
@@ -31,6 +35,7 @@ public:
 
     void setMaxClients(const int &maxClients);
     int getMaxClients();
+    int getClientsCount();
 
     bool getListenStatus();
 
@@ -42,9 +47,12 @@ public:
 
     std::string getClientAddress(const TcpClient &client);
 
+    void closeClient(const TcpClient &client);
+
     virtual void receive(const TcpClient &client,
                          const char *data,
-                         const int &length) = 0;
+                         const int &length);
+    void setReceiveCallback(ReceiveCallback ReceiveCallback);
 
 private:
     void init();
@@ -57,11 +65,10 @@ private:
     bool listenStatus;
     char *receiveBuffer;
     int receiveBufferSize;
-
     std::thread *receiveThread;
     std::queue<TcpClient *> clients;
     int maxClients; /* default: 10 */
-    bool clientsEnoughWarned;
+    ReceiveCallback receiveCallback;
 };
 
 /* udp server */

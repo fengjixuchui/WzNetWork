@@ -11,28 +11,31 @@ namespace network
 {
 
 /* tcp socket */
+using ReceiveCallback = void (*)(const char *data,
+                                 const int &length);
 struct TcpSocketHandle;
 class TcpSocket
 {
 public:
     TcpSocket();
-    TcpSocket(const std::string& ip,const int& port);
+    TcpSocket(const std::string &ip, const int &port);
     virtual ~TcpSocket();
 
-    void setIp(const std::string& ip);
+    void setIp(const std::string &ip);
     std::string getIp();
-    void setPort(const int& port);
+    void setPort(const int &port);
     int getPort();
 
     bool connect();
     bool isConnected();
     void disconnect();
 
-    int send(const char* data,const int& length);
-    int send(const std::string& data);
-    void resizeReceiveBuffer(const int& size);
+    int send(const char *data, const int &length);
+    int send(const std::string &data);
+    void resizeReceiveBuffer(const int &size);
 
-    virtual void receive(const char* data,const int& length) = 0;
+    virtual void receive(const char *data, const int &length);
+    void setReceiveCallback(ReceiveCallback receiveCallback);
 
 private:
     void init();
@@ -41,9 +44,10 @@ private:
 
 private:
     TcpSocketHandle *handle;
-    char* receiveBuffer;
+    char *receiveBuffer;
     int receiveBufferSize;
-    std::thread* receiveThread;
+    std::thread *receiveThread;
+    ReceiveCallback receiveCallback;
 };
 
 /* udp socket */
