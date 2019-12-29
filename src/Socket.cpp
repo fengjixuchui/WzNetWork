@@ -450,10 +450,18 @@ void TcpSocket::receiveThreadRun()
 #ifdef _WIN32
 struct UdpSocketHandle
 {
+    WORD socketVersion;
+    WSADATA data;
+    int wsaStartupResult;
+
+    sockaddr_in serverAddress;
+    SOCKET socket;
 };
 #else
 struct UdpSocketHandle
 {
+    sockaddr_in serverAddress;
+    int socket;
 };
 #endif
 
@@ -461,8 +469,62 @@ UdpSocket::UdpSocket()
 {
 }
 
+UdpSocket::UdpSocket(const std::string &ip, const int &port)
+{
+}
+
 UdpSocket::~UdpSocket()
 {
+}
+
+void UdpSocket::setIp(const std::string &ip)
+{
+
+}
+
+std::string UdpSocket::getIp()
+{
+
+}
+
+void UdpSocket::setPort(const int &port)
+{
+
+}
+
+int UdpSocket::getPort()
+{
+
+}
+
+int UdpSocket::send(const char *data, const int &length)
+{
+
+}
+
+int UdpSocket::send(const std::string &data)
+{
+
+}
+
+void UdpSocket::receive(const char *data, const int &length)
+{
+
+}
+
+void UdpSocket::setReceiveCallback(ReceiveCallback receiveCallback)
+{
+
+}
+
+void UdpSocket::init()
+{
+
+}
+
+void UdpSocket::release()
+{
+    
 }
 
 } // namespace network

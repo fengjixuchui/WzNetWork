@@ -10,9 +10,10 @@ namespace wz
 namespace network
 {
 
-/* tcp socket */
 using ReceiveCallback = void (*)(const char *data,
                                  const int &length);
+
+/* tcp socket */
 struct TcpSocketHandle;
 class TcpSocket
 {
@@ -56,7 +57,20 @@ class UdpSocket
 {
 public:
     UdpSocket();
+    UdpSocket(const std::string &ip, const int &port);
     virtual ~UdpSocket();
+
+    void setIp(const std::string &ip);
+    std::string getIp();
+    void setPort(const int &port);
+    int getPort();
+
+    int send(const char *data, const int &length);
+    int send(const std::string &data);
+
+    virtual void receive(const char *data, const int &length);
+
+    void setReceiveCallback(ReceiveCallback receiveCallback);
 
 private:
     void init();
@@ -64,6 +78,10 @@ private:
 
 private:
     UdpSocketHandle *handle;
+    char *receiveBuffer;
+    int receiveBufferSize;
+    std::thread *receiveThread;
+    ReceiveCallback receiveCallback;
 };
 
 } // namespace network

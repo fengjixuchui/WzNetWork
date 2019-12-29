@@ -11,11 +11,12 @@ namespace wz
 namespace network
 {
 
-/* tcp server */
 using ReceiveCallback = void (*)(void* server,
                                  void* client,
                                  const char *data,
                                  const int &length);
+
+/* tcp server */
 struct TcpHandle;
 struct TcpClient;
 class TcpServer
@@ -73,11 +74,27 @@ private:
 
 /* udp server */
 struct UdpHandle;
+struct UdpClient;
 class UdpServer
 {
 public:
     UdpServer();
+    UdpServer(const int &port);
     virtual ~UdpServer();
+
+    void setPort(const int &port);
+    int getPort();
+
+    bool listen();
+    void close();
+
+    int send(const UdpClient &client,
+             const char *data,
+             const int &length);
+    int send(const UdpClient &client,
+             const std::string &data);
+
+    std::string getClientAddress(const UdpClient &client);
 
 private:
     void init();
@@ -85,6 +102,11 @@ private:
 
 private:
     UdpHandle *handle;
+    bool listenStatus;
+    char *receiveBuffer;
+    int receiveBufferSize;
+    std::thread *receiveThread;
+    ReceiveCallback receiveCallback;
 };
 
 } // namespace network
