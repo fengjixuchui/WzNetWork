@@ -67,6 +67,7 @@ public:
 
     int send(const char *data, const int &length);
     int send(const std::string &data);
+    void resizeReceiveBuffer(const int &size);
 
     virtual void receive(const char *data, const int &length);
 

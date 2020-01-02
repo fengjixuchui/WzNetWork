@@ -367,7 +367,7 @@ void TcpSocket::init()
     }
     else
     {
-        printf("[TcpSocket::init()]: handle is NULL , new TcpTcpSocketHandle failed.\n");
+        printf("[TcpSocket::init()]: handle is NULL , new TcpSocketHandle failed.\n");
     }
 
     receiveBufferSize = 4096;
@@ -466,15 +466,28 @@ struct UdpSocketHandle
 #endif
 
 UdpSocket::UdpSocket()
+    : handle(NULL),
+      receiveBuffer(NULL),
+      receiveBufferSize(0),
+      receiveThread(NULL),
+      receiveCallback(NULL)
 {
+    init();
 }
 
 UdpSocket::UdpSocket(const std::string &ip, const int &port)
+    : handle(NULL),
+      receiveBuffer(NULL),
+      receiveBufferSize(0),
+      receiveThread(NULL),
+      receiveCallback(NULL)
 {
+    init();
 }
 
 UdpSocket::~UdpSocket()
 {
+    release();
 }
 
 void UdpSocket::setIp(const std::string &ip)
@@ -507,6 +520,18 @@ int UdpSocket::send(const std::string &data)
 
 }
 
+void UdpSocket::resizeReceiveBuffer(const int &size)
+{
+    if (receiveBufferSize > 0)
+    {
+        delete[] receiveBuffer;
+        receiveBuffer = NULL;
+
+        receiveBufferSize = size;
+        receiveBuffer = new char[receiveBufferSize];
+    }
+}
+
 void UdpSocket::receive(const char *data, const int &length)
 {
 
@@ -519,7 +544,49 @@ void UdpSocket::setReceiveCallback(ReceiveCallback receiveCallback)
 
 void UdpSocket::init()
 {
+    handle = new UdpSocketHandle;
+    if (NULL != handle)
+    {
+#ifdef _WIN32
+        handle->socketVersion = MAKEWORD(2, 2);
+        handle->wsaStartupResult = WSAStartup(handle->socketVersion, &(handle->data));
+        if (0 != handle->wsaStartupResult)
+        {
+            printf("[TcpSocket::init()]: init failed with socket version. Try again , "
+                   "debug source or contact author!\n");
+        }
+        else
+        {
+            handle->serverAddress.sin_family = AF_INET;
+            switch (inet_pton(AF_INET, "0.0.0.0", &(handle->serverAddress.sin_addr)))
+            {
+            case -1:
+                printf("[TcpSocket::init()]: "
+                       "init ip failed with function 'inet_pton' inner error,please try "
+                       "after with setIP(const std::string& ip).\n");
+                break;
+            case 0: /* invalid ip */
+            case 1: /* set ip success */
+            default:
+                break;
+            }
+            handle->serverAddress.sin_port = htons(0);
+            handle->socket = INVALID_SOCKET;
+        }
+#else
+        memset(&(handle->serverAddress), 0, sizeof(handle->serverAddress));
+        handle->serverAddress.sin_family = AF_INET;
+        handle->serverAddress.sin_port = htons(0);
+        handle->socket = -1;
+#endif
+    }
+    else
+    {
+        printf("[UdpSocket::init()]: handle is NULL , new UdpSocketHandle failed.\n");
+    }
 
+    receiveBufferSize = 4096;
+    receiveBuffer = new char[receiveBufferSize];
 }
 
 void UdpSocket::release()
