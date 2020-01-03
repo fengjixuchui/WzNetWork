@@ -86,7 +86,7 @@ TcpServer::TcpServer(const int &port)
       receiveCallback(NULL)
 {
     init();
-	
+
 #ifdef _WIN32
     if (NULL != handle && 0 == handle->wsaStartupResult)
 #else
@@ -148,13 +148,13 @@ int TcpServer::getPort()
 
 bool TcpServer::listen()
 {
-    if(listenStatus)
+    if (listenStatus)
     {
         printf("[TcpServer::listen()]: listen failed with listenStatus is true.\n");
         return false;
     }
 
-#ifdef _WIN32    
+#ifdef _WIN32
     if (NULL != handle && 0 == handle->wsaStartupResult)
     {
         handle->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -176,10 +176,10 @@ bool TcpServer::listen()
                                  (LPSOCKADDR) & (handle->handleAddress),
                                  sizeof(handle->handleAddress)))
 #else
-        if(-1 == bind(handle->socket,
-        (struct sockaddr*)& (handle->handleAddress),
-        sizeof(handle->handleAddress)))
-#endif                                 
+        if (-1 == bind(handle->socket,
+                       (struct sockaddr *)&(handle->handleAddress),
+                       sizeof(handle->handleAddress)))
+#endif
         {
             printf("[TcpServer::listen()]: listen failed with bind error , "
                    "may be server is closed.\n");
@@ -189,8 +189,8 @@ bool TcpServer::listen()
 #ifdef _WIN32
         if (SOCKET_ERROR == ::listen(handle->socket, 5))
 #else
-        if(-1 == ::listen(handle->socket,5))
-#endif        
+        if (-1 == ::listen(handle->socket, 5))
+#endif
         {
             printf("[TcpServer::listen()]: listen failed with ::listen failed.\n");
             return false;
@@ -216,10 +216,10 @@ void TcpServer::close()
         while (clients.size() > 0)
         {
             frontClient = clients.front();
-#ifdef _WIN32            
+#ifdef _WIN32
             closesocket(frontClient->clientHandle.socket);
             frontClient->clientHandle.socket = INVALID_SOCKET;
-#else       
+#else
             shutdown(frontClient->clientHandle.socket, SHUT_RDWR);
             ::close(frontClient->clientHandle.socket);
             frontClient->clientHandle.socket = -1;
@@ -235,11 +235,11 @@ void TcpServer::close()
 
 #ifdef _WIN32
     if (INVALID_SOCKET != handle->socket)
-    {        
+    {
         closesocket(handle->socket);
         handle->socket = INVALID_SOCKET;
 #else
-    if(-1 != handle->socket)
+    if (-1 != handle->socket)
     {
         shutdown(handle->socket, SHUT_RDWR);
         ::close(handle->socket);
@@ -317,7 +317,7 @@ void TcpServer::closeClient(const TcpClient &client)
         }
         else
         {
-#ifdef _WIN32            
+#ifdef _WIN32
             closesocket(frontClient->clientHandle.socket);
             frontClient->clientHandle.socket = INVALID_SOCKET;
 #else
@@ -377,8 +377,8 @@ void TcpServer::init()
         memset(&(handle->handleAddress), 0, sizeof(handle->handleAddress));
         handle->handleAddress.sin_family = AF_INET;
         handle->handleAddress.sin_port = htons(0);
-        handle->handleAddress.sin_addr.s_addr = htonl(INADDR_ANY);   
-#endif        
+        handle->handleAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+#endif
     }
     else
     {
@@ -421,7 +421,7 @@ void TcpServer::receiveThreadRun()
 #ifdef _WIN32
     while (INVALID_SOCKET != handle->socket)
 #else
-    while(-1 != handle->socket)
+    while (-1 != handle->socket)
 #endif
     {
         client = new TcpClient;
@@ -438,8 +438,8 @@ void TcpServer::receiveThreadRun()
 #else
         client->clientHandle.socket = accept(handle->socket,
                                              (sockaddr *)&(client->clientHandle.handleAddress),
-                                             (socklen_t*)&clientAddressLength);
-        if(-1 == client->clientHandle.socket)
+                                             (socklen_t *)&clientAddressLength);
+        if (-1 == client->clientHandle.socket)
 #endif
         {
             printf("[TcpServer::receiveThreadRun()]: accept failed with invalid socket.\n");
@@ -451,15 +451,15 @@ void TcpServer::receiveThreadRun()
         if (maxClients <= clients.size())
         {
             printf("[TcpServer::receiveThreadRun()]: accept failed with "
-                    "clients enough , you need resize maxClients.\n");
+                   "clients enough , you need resize maxClients.\n");
 #ifdef _WIN32
             closesocket(client->clientHandle.socket);
             client->clientHandle.socket = INVALID_SOCKET;
-#else       
+#else
             shutdown(client->clientHandle.socket, SHUT_RDWR);
             ::close(client->clientHandle.socket);
             client->clientHandle.socket = -1;
-#endif            
+#endif
             delete client;
             client = NULL;
             continue;
@@ -504,18 +504,74 @@ void TcpServer::clientsReceiveThreadRun(TcpClient *client)
 #ifdef _WIN32
 struct UdpHandle
 {
+    WORD socketVersion;
+    WSADATA data;
+    int wsaStartupResult;
+
+    sockaddr_in handleAddress;
+    SOCKET socket;
 };
 #else
-struct UdpServerHandle
+struct UdpHandle
 {
+    sockaddr_in handleAddress;
+    int socket;
 };
 #endif
+
+struct UdpClient
+{
+    UdpHandle clientHandle;
+};
 
 UdpServer::UdpServer()
 {
 }
 
+UdpServer::UdpServer(const int &port)
+{
+}
+
 UdpServer::~UdpServer()
+{
+}
+
+void UdpServer::setPort(const int &port)
+{
+}
+
+int UdpServer::getPort()
+{
+}
+
+bool UdpServer::listen()
+{
+}
+
+void UdpServer::close()
+{
+}
+
+int UdpServer::send(const UdpClient &client,
+                    const char *data,
+                    const int &length)
+{
+}
+
+int UdpServer::send(const UdpClient &client,
+                    const std::string &data)
+{
+}
+
+std::string UdpServer::getClientAddress(const UdpClient &client)
+{
+}
+
+void UdpServer::init()
+{
+}
+
+void UdpServer::release()
 {
 }
 
